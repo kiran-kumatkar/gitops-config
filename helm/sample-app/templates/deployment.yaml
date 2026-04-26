@@ -20,7 +20,7 @@ spec:
       containers:
         - name: sample-app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: Always
           ports:
             - containerPort: {{ .Values.service.targetPort }}
           env:
