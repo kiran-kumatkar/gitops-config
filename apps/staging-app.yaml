@@ -11,10 +11,7 @@ spec:
     path: helm/sample-app
     helm:
       valueFiles:
-        - ../../environments/staging/values.yaml
-      parameters:
-        - name: image.tag
-          value: "v1.0.0"              
+        - ../../environments/staging/values.yaml            
   destination:
     server: https://kubernetes.default.svc
     namespace: staging
