@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: sample-app
-          image: kirankumatkar217/sample-app:v1.0.0  
+          image: kirankumatkar217/sample-app:v3.0.0  
           ports:
             - containerPort: 5000
           env:
