@@ -1,0 +1,37 @@
+# gitops-config/apps/monitoring-app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.io
+spec:
+  project: default
+
+  sources:
+    # Source 1 — the actual Helm chart from prometheus-community
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "55.5.0"
+      helm:
+        valueFiles:
+          - $values/helm/values/kube-prometheus-stack-values.yaml
+
+    # Source 2 — your values file from k8s-monitoring repo
+    # ArgoCD fetches this and passes it to the Helm chart above
+    - repoURL: https://github.com/kiran-kumatkar/k8s-monitoring
+      targetRevision: HEAD
+      ref: values    # Referenced as $values in Source 1
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
