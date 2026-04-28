@@ -13,7 +13,7 @@ spec:
   source:
     repoURL: https://github.com/kiran-kumatkar/k8s-monitoring
     targetRevision: HEAD
-    path: .        # ArgoCD picks up servicemonitor/ and rules/ folders
+    path: .
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

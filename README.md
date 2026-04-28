@@ -1,25 +1,25 @@
-# GitOps Config — ArgoCD Deployment Repository
+﻿# GitOps Config — ArgoCD Deployment Repository
 
 ![ArgoCD](https://img.shields.io/badge/GitOps-ArgoCD-orange)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-KIND-blue)
 ![Helm](https://img.shields.io/badge/Helm-Chart-0F1689)
-![GitHub Actions](https://img.shields.io/badge/CI-GitHub_Actions-2088FF)
+![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
 
 This repository is the **single source of truth** for all Kubernetes deployments.
 ArgoCD continuously watches this repo and reconciles the cluster to match what is declared here.
 
-> **Application Repository:** [sample-app](https://github.com/kiran-kumatkar/sample-app)
+> **Application Repo:** [sample-app](https://github.com/kiran-kumatkar/sample-app)
+> **Monitoring Config Repo:** [k8s-monitoring](https://github.com/kiran-kumatkar/k8s-monitoring)
 
 ---
 
 ## What is GitOps?
 
-GitOps is an operational framework where:
-
 - **Git is the single source of truth** for all deployment configuration
-- **Changes happen via git commits** — full audit trail and history
-- **ArgoCD automatically reconciles** the cluster state to match Git
-- **Self-healing** — any manual change to the cluster is automatically reverted
+- **Changes happen via git commits** — full audit trail and peer review
+- **ArgoCD automatically reconciles** cluster state to match Git
+- **Self-healing** — manual cluster changes are automatically reverted within 3 minutes
 - **No kubectl in CI** — the cluster pulls from Git, credentials never leave the cluster
 
 ---
@@ -28,22 +28,24 @@ GitOps is an operational framework where:
 
 ```
 gitops-config/
-├── apps/                          # ArgoCD Application definitions
-│   ├── root-app.yaml              # App of Apps — bootstraps everything
-│   ├── gitops-project.yaml        # ArgoCD AppProject — RBAC and boundaries
-│   ├── dev-app.yaml               # Dev environment Application
-│   └── staging-app.yaml           # Staging environment Application
+├── apps/                              # ArgoCD Application definitions
+│   ├── root-app.yaml                  # App of Apps — bootstraps everything
+│   ├── gitops-project.yaml            # ArgoCD AppProject — RBAC boundaries
+│   ├── dev-app.yaml                   # Dev environment Application
+│   ├── staging-app.yaml               # Staging environment Application
+│   ├── monitoring-app.yaml            # kube-prometheus-stack Application
+│   └── monitoring-extras-app.yaml     # ServiceMonitor + PrometheusRules Application
 ├── environments/
-│   ├── dev/                       # Dev — plain Kubernetes YAML manifests
+│   ├── dev/                           # Dev — plain Kubernetes YAML
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   └── configmap.yaml
 │   └── staging/
-│       └── values.yaml            # Staging — Helm value overrides only
+│       └── values.yaml                # Staging — Helm value overrides
 └── helm/
-    └── sample-app/                # Helm chart (used by staging)
+    └── sample-app/                    # Helm chart (used by staging)
         ├── Chart.yaml
-        ├── values.yaml            # Base default values
+        ├── values.yaml
         └── templates/
             ├── deployment.yaml
             ├── service.yaml
@@ -52,55 +54,77 @@ gitops-config/
 
 ---
 
+## Applications Managed by ArgoCD
+
+| ArgoCD App | Source Repo | Path | Namespace | Method |
+|------------|-------------|------|-----------|--------|
+| `sample-app-dev` | gitops-config | `environments/dev` | dev | Plain YAML |
+| `sample-app-staging` | gitops-config | `helm/sample-app` | staging | Helm Chart |
+| `kube-prometheus-stack` | k8s-monitoring | `helm/values/` | monitoring | Helm Chart |
+| `monitoring-extras` | k8s-monitoring | `.` (root) | monitoring | Plain YAML |
+
+---
+
 ## Environments
 
 | Environment | Namespace | Managed By | Replicas |
 |-------------|-----------|------------|----------|
 | Dev | `dev` | Plain Kubernetes YAML | 3 |
-| Staging | `staging` | Helm Chart | 3 |
-
-Both environments run the same Docker image — only values differ per environment.
+| Staging | `staging` | Helm Chart with value overrides | 3 |
+| Monitoring | `monitoring` | kube-prometheus-stack Helm chart | — |
 
 ---
 
 ## ArgoCD Concepts Demonstrated
 
-| Concept | Where |
-|---------|-------|
-| **App of Apps** | `apps/root-app.yaml` — one manifest bootstraps all Applications |
-| **AppProject** | `apps/gitops-project.yaml` — RBAC, allowed repos and namespaces |
+| Concept | Implementation |
+|---------|---------------|
+| **App of Apps** | `root-app.yaml` bootstraps all Applications from `apps/` folder |
+| **AppProject** | RBAC boundaries — allowed repos, namespaces, resource types |
 | **Automated sync** | ArgoCD syncs on every git push automatically |
-| **Self-heal** | Manual kubectl changes reverted within 3 minutes |
+| **Self-heal** | Manual kubectl changes reverted automatically |
 | **Prune** | Resources deleted from Git are deleted from cluster |
 | **Sync waves** | AppProject created before Applications (`wave: -1`) |
-| **Helm integration** | Staging uses Helm chart with per-environment value overrides |
-| **Multi-environment** | Dev uses plain YAML, Staging uses Helm — same app, different approach |
+| **Helm integration** | Staging and monitoring use Helm charts |
+| **Multiple sources** | monitoring-app uses Helm chart + values from separate repo |
+| **Multi-environment** | Dev (plain YAML) vs Staging (Helm) — same app, different approach |
 
 ---
 
-## GitOps Flow
+## GitOps Flow — Application Deployment
 
 ```
-git push to sample-app repo
-          ↓
+Developer pushes code to sample-app repo
+              ↓
 GitHub Actions builds Docker image
-          ↓
+              ↓
 Image pushed to DockerHub (kirankumatkar217/sample-app:v1.0.0-<sha>)
-          ↓
+              ↓
 GitHub Actions commits updated image tag to THIS repo
-          ↓
+              ↓
 ArgoCD detects new commit (polls every 3 minutes)
-          ↓
-ArgoCD syncs dev and staging namespaces
-          ↓
-New pods running with updated image
+              ↓
+New pods running with updated image — zero manual steps
+```
+
+## GitOps Flow — Monitoring Changes
+
+```
+Change pushed to k8s-monitoring repo
+              ↓
+ArgoCD detects change
+              ↓
+kube-prometheus-stack syncs new Helm values
+monitoring-extras syncs updated rules and monitors
+              ↓
+Prometheus picks up new rules automatically
+              ↓
+Alertmanager routes firing alerts to email
 ```
 
 ---
 
 ## Bootstrap — Fresh Cluster Setup
-
-Everything can be bootstrapped with just 3 commands:
 
 ```bash
 # 1. Install ArgoCD
@@ -108,33 +132,48 @@ kubectl create namespace argocd
 kubectl apply -n argocd -f \
   https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-# 2. Apply AppProject first (Applications reference this)
+# 2. Create monitoring email secret (not stored in Git)
+kubectl create namespace monitoring
+kubectl create secret generic alertmanager-email-secret \
+  --from-literal=smtp_password='your-gmail-app-password' \
+  --namespace monitoring
+
+# 3. Apply AppProject first
 kubectl apply -f apps/gitops-project.yaml
 
-# 3. Apply root-app — ArgoCD manages everything from this point
+# 4. Apply root-app — ArgoCD manages everything from this point
 kubectl apply -f apps/root-app.yaml
 ```
 
-ArgoCD will automatically discover and create:
-- `sample-app-dev` → deploys to `dev` namespace
-- `sample-app-staging` → deploys to `staging` namespace
-
 ---
 
-## Access ArgoCD UI
+## Access UIs
 
 ```bash
-# Patch service to NodePort
+# ArgoCD
 kubectl patch svc argocd-server -n argocd \
   -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "nodePort": 30080}]}}'
-
-# Get admin password
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
-
-# Open in browser
 # https://localhost:9080
-# Username: admin
+
+# Dev app
+kubectl port-forward svc/sample-app 8888:80 -n dev
+# http://localhost:8888
+
+# Staging app
+kubectl port-forward svc/sample-app 8889:80 -n staging
+# http://localhost:8889
+
+# Grafana
+kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
+# http://localhost:3000
+
+# Prometheus
+kubectl port-forward svc/kube-prometheus-stack-prometheus 9090:9090 -n monitoring
+# http://localhost:9090
+
+# Alertmanager
+kubectl port-forward svc/kube-prometheus-stack-alertmanager 9093:9093 -n monitoring
+# http://localhost:9093
 ```
 
 ---
@@ -142,24 +181,12 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 ## Useful ArgoCD Commands
 
 ```bash
-# List all applications
 argocd app list
-
-# Get application details and sync status
 argocd app get sample-app-dev
-argocd app get sample-app-staging
-
-# Manually trigger sync
 argocd app sync sample-app-dev
-
-# View deployment history
 argocd app history sample-app-dev
-
-# Rollback to previous version
 argocd app rollback sample-app-dev
-
-# View all managed resources
-argocd app resources sample-app-dev
+argocd app get kube-prometheus-stack --hard-refresh
 ```
 
 ---
@@ -186,8 +213,11 @@ curl http://localhost:8889
 
 ---
 
-## Related Repository
+
+## Related Repositories
 
 | Repository | Purpose |
 |------------|---------|
-| [sample-app](https://github.com/kiran-kumatkar/sample-app) | Application source code, Dockerfile, GitHub Actions CI pipeline |
+| [sample-app](https://github.com/kiran-kumatkar/sample-app) | Flask app source code, Dockerfile, GitHub Actions CI |
+| [k8s-monitoring](https://github.com/kiran-kumatkar/k8s-monitoring) | Prometheus values, alert rules, ServiceMonitors |
+
