@@ -3,7 +3,7 @@ replicaCount: 3
 
 image:
   repository: kirankumatkar217/sample-app
-  tag: "v1.0.0-0e054ea"
+  tag: "v1.0.0-4de349b"
   pullPolicy: IfNotPresent
 
 service:
