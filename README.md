@@ -221,3 +221,11 @@ curl http://localhost:8889
 | [sample-app](https://github.com/kiran-kumatkar/sample-app) | Flask app source code, Dockerfile, GitHub Actions CI |
 | [k8s-monitoring](https://github.com/kiran-kumatkar/k8s-monitoring) | Prometheus values, alert rules, ServiceMonitors |
 
+---
+
+# Screenshots
+
+All command outputs and observations are captured in the [screenshots/](./screenshots) folder.
+---
+
+
